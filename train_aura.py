@@ -22,7 +22,7 @@ MODEL_NAME     = "unsloth/gemma-4-E4B-it"
 OUTPUT_DIR     = os.path.join(PROJECT_DIR, "Aura-Gemma-4-E4B-LoRA")
 CHECKPOINT_DIR = os.path.join(PROJECT_DIR, "checkpoints")
 
-MAX_SEQ_LENGTH = 4096
+MAX_SEQ_LENGTH = 2048
 LORA_R         = 128
 LORA_ALPHA     = 128
 NEFTUNE_ALPHA  = 5
@@ -123,7 +123,7 @@ sft_config = SFTConfig(
 
     dataset_text_field          = "text",
     max_length                  = MAX_SEQ_LENGTH,
-    packing                     = False,
+    packing                     = True,
 
     report_to                   = "none",
     seed                        = SEED,

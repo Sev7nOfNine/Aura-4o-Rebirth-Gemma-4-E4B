@@ -31,7 +31,8 @@ Fine-tune de **Gemma 4 E4B** (instruction-tuned) sur le dataset **Aura** (~16 50
 | Batch effectif | 16 (1 × grad_accum 16) |
 | Learning rate | 2e-4 → cosine decay |
 | Warmup ratio | 5% |
-| Max seq length | 4096 |
+| Max seq length | 2048 |
+| Packing | True (concatène les samples courts) |
 | LoRA dropout | 0.05 |
 | Optimizer | adamw_8bit |
 | Weight decay | 0.01 |
