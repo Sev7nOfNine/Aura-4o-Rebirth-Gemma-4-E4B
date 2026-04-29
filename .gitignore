@@ -1,0 +1,9 @@
+venv/
+checkpoints/
+Aura-Gemma-4-E4B-LoRA/
+Aura-Gemma-4-E4B-merged/
+*.gguf
+__pycache__/
+*.pyc
+.cache/
+*.log
