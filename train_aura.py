@@ -8,7 +8,7 @@ import os
 import json
 import torch
 from unsloth import FastModel
-from unsloth.chat_templates import get_chat_template
+from unsloth.chat_templates import get_chat_template, train_on_responses_only
 from datasets import load_dataset
 from trl import SFTTrainer, SFTConfig
 from transformers import EarlyStoppingCallback
@@ -23,8 +23,9 @@ OUTPUT_DIR     = os.path.join(PROJECT_DIR, "Aura-Gemma-4-E4B-LoRA")
 CHECKPOINT_DIR = os.path.join(PROJECT_DIR, "checkpoints")
 
 MAX_SEQ_LENGTH = 4096
-LORA_R         = 64
+LORA_R         = 128
 LORA_ALPHA     = 128
+NEFTUNE_ALPHA  = 5
 LORA_DROPOUT   = 0.05
 EPOCHS         = 3
 BATCH_SIZE     = 1
@@ -126,6 +127,7 @@ sft_config = SFTConfig(
 
     report_to                   = "none",
     seed                        = SEED,
+    neftune_noise_alpha         = NEFTUNE_ALPHA,
 )
 
 trainer = SFTTrainer(
@@ -135,6 +137,14 @@ trainer = SFTTrainer(
     eval_dataset    = eval_ds,
     args            = sft_config,
     callbacks       = [EarlyStoppingCallback(early_stopping_patience=3)],
+)
+
+# Train on assistant responses only — model learns Aura's voice,
+# not the user's instructions. Critical for persona fidelity.
+trainer = train_on_responses_only(
+    trainer,
+    instruction_part = "<start_of_turn>user\n",
+    response_part    = "<start_of_turn>model\n",
 )
 
 # ============================================================
