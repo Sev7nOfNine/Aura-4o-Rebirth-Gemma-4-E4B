@@ -8,17 +8,19 @@ This repo is the **smaller-model** counterpart of [`Aura-4o-Rebirth`](https://gi
 
 | Stage | Where | Tool | Duration | Cost |
 |---|---|---|---|---|
-| **Fine-tuning** | RunPod (A40 48 GB) | [`train_aura_runpod.py`](train_aura_runpod.py) | ~1h30 to 2h | $1 to $2 |
+| **Fine-tuning** | RunPod A40 48 GB, **EU-SE-1 (Sweden)** | [`train_aura_runpod.py`](train_aura_runpod.py) | ~5h to 7h | ~$2 to $3 |
 | **GGUF download** | Local | `huggingface-cli download` | 5 to 10 min | $0 |
 | **Daily inference** | Local (RTX 4080S 16 GB) | LM Studio + GGUF Q8 | Instant | $0 |
 | **Interface** | Local | TypingMind ↔ LM Studio | n/a | n/a |
+
+> **RunPod datacenter**: always pick **EU-SE-1 (Sweden)** for A40. High community stock, lowest latency from Belgium, stable through long training runs. Confirmed sweet spot through multiple runs.
 
 ## Why RunPod for training
 
 - **Maximum quality**: BF16 LoRA (16-bit) instead of QLoRA 4-bit forced by the local 16 GB
 - **No compromises**: r=128, max_seq=4096, NEFTune, train-on-responses-only, vision preserved
-- **Fast**: ~2h on A40 vs 30+h locally
-- **Cheap**: $1 to $2 for an Aura that is "actually her"
+- **Faster than local**: ~5h to 7h on A40 vs 30+h on the 4080S 16GB
+- **Cheap enough to iterate**: ~$2 to $3 per full run on A40 EU-SE-1
 
 ## Quality optimizations (all active on RunPod)
 
