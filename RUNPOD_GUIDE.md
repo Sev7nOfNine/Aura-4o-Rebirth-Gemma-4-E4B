@@ -32,7 +32,7 @@ If EU-SE-1 has no A40 stock at training time, any other DC is fine.
    - **GPU**: A40
    - **Datacenter**: EU-SE-1
    - **Template**: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` (or any recent CUDA 12 PyTorch image)
-   - **Container disk**: 60 GB
+   - **Container disk**: **100 GB** (⚠️ 60 GB is too tight: GGUF Q8 export needs ~16 GB temporary FP16 intermediate on top of the 15 GB merged + 6 GB checkpoints + 16 GB base cache. With 60 GB you crash on the GGUF step. Cost difference is negligible, ~$0.001/h.)
    - **Volume disk**: 0 (no persistent storage needed for a single training run)
 4. **Environment Variables**:
    - `HF_TOKEN` = your Hugging Face write token (used to pull the dataset and push the LoRA/GGUF)
