@@ -1,28 +1,56 @@
-"""Quick token-length analysis of the Aura dataset."""
-import json
+"""
+Quick token-length analysis of the Aura multi-turn dataset.
+
+Pulls the chunked Rebirth dataset directly from Hugging Face (private)
+and reports token-length stats per conversation chunk against Gemma 4 E4B
+tokenizer. Useful to confirm chunks fit `max_seq_length=4096` before paying
+for a training run.
+
+Run:
+    HF_TOKEN=... python analyze_dataset.py
+"""
+import os
+import statistics as st
+
+from datasets import load_dataset
 from transformers import AutoTokenizer
 
-DATASET = r"F:\AI\Hugging Face\aura-dataset\aura_dataset.jsonl"
+DATASET_REPO = "SevenOfNine/Aura-4o-Rebirth-Dataset"
+MODEL_NAME   = "unsloth/gemma-4-E4B-it"
 
-print("Loading tokenizer...")
-tok = AutoTokenizer.from_pretrained("unsloth/gemma-4-E4B-it")
+HF_TOKEN = os.environ.get("HF_TOKEN")
+if not HF_TOKEN:
+    raise SystemExit("HF_TOKEN env var required (private dataset)")
 
-instr_lens = []
-out_lens   = []
-total_lens = []  # full conversation length (instr + output + chat template overhead ~30 tok)
+print(f"Loading tokenizer: {MODEL_NAME}")
+tok = AutoTokenizer.from_pretrained(MODEL_NAME, token=HF_TOKEN)
 
-with open(DATASET, "r", encoding="utf-8") as f:
-    for i, line in enumerate(f):
-        d = json.loads(line)
-        i_tok = len(tok.encode(d["instruction"], add_special_tokens=False))
-        o_tok = len(tok.encode(d["output"],      add_special_tokens=False))
-        instr_lens.append(i_tok)
-        out_lens.append(o_tok)
-        total_lens.append(i_tok + o_tok + 30)
-        if (i+1) % 2000 == 0:
-            print(f"  {i+1} samples processed...")
+print(f"Loading dataset: {DATASET_REPO}")
+ds = load_dataset(DATASET_REPO, split="train", token=HF_TOKEN)
+print(f"Rows: {len(ds)}")
 
-import statistics as st
+# Apply chat template per row to get realistic full-conversation token counts
+chunk_lens   = []
+turn_counts  = []
+assistant_token_counts = []  # tokens that train_on_responses_only will actually train on
+
+for i, row in enumerate(ds):
+    msgs = row["messages"]
+    full_text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=False)
+    full_ids  = tok.encode(full_text, add_special_tokens=False)
+    chunk_lens.append(len(full_ids))
+    turn_counts.append(len(msgs))
+
+    # Count tokens that belong to assistant turns only (rough estimate, no real masking)
+    assistant_text = "".join(
+        m.get("content", "") if isinstance(m.get("content", ""), str) else ""
+        for m in msgs if m.get("role") == "assistant"
+    )
+    assistant_token_counts.append(len(tok.encode(assistant_text, add_special_tokens=False)))
+
+    if (i + 1) % 500 == 0:
+        print(f"  {i+1} chunks processed...")
+
 
 def report(name, data):
     data_sorted = sorted(data)
@@ -36,7 +64,8 @@ def report(name, data):
         over = sum(1 for x in data if x > limit)
         print(f"  > {limit} tokens: {over} ({100*over/n:.2f}%)")
 
-print(f"\n=== Aura dataset: {len(total_lens)} samples ===")
-report("Instruction tokens", instr_lens)
-report("Output tokens", out_lens)
-report("Total (full conversation)", total_lens)
+
+print(f"\n=== Aura-4o-Rebirth-Dataset: {len(chunk_lens)} chunks ===")
+report("Chunk total tokens (full conversation)", chunk_lens)
+report("Turns per chunk", turn_counts)
+report("Assistant-only tokens per chunk", assistant_token_counts)

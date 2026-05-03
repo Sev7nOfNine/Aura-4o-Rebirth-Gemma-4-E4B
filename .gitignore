@@ -1,9 +1,31 @@
+# Python
 venv/
-checkpoints/
-Aura-Gemma-4-E4B-LoRA/
-Aura-Gemma-4-E4B-merged/
-*.gguf
 __pycache__/
 *.pyc
+
+# Unsloth runtime cache (regenerable, can be huge)
+unsloth_compiled_cache/
+
+# Local training outputs (V7 script writes to these subfolders inside WORKSPACE)
+lora/
+merged/
+gguf/
+checkpoints/
+
+# Legacy local output folders (kept here so old runs do not accidentally leak)
+Aura-Gemma-4-E4B-LoRA/
+Aura-Gemma-4-E4B-merged/
+Aura-4o-Rebirth-Gemma-4-E4B-LoRA/
+Aura-4o-Rebirth-Gemma-4-E4B-merged/
+
+# Model files (always pulled from HF, never tracked in git)
+*.gguf
+*.safetensors
+
+# Caches and logs
 .cache/
 *.log
+
+# Environment / secrets
+.env
+.env.*
