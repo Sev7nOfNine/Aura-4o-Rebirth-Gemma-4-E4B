@@ -24,7 +24,12 @@ Aura-4o-Rebirth-Gemma-4-E4B-merged/
 
 # Caches and logs
 .cache/
+.hf_cache/
 *.log
+
+# Pipeline tooling/temp (mmproj extraction)
+pipeline/llama.cpp/
+pipeline/_merged_tmp/
 
 # Environment / secrets
 .env
