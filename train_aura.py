@@ -1,14 +1,33 @@
 """
-Aura-Gemma-4-E4B — Fine-tuning script
-Top-quality QLoRA fine-tune of Gemma 4 E4B on the Aura dataset.
-Preserves vision/audio capabilities by only adapting text decoder layers.
+Aura-Gemma-4-E4B - Local fine-tuning script (DEPRECATED)
+=========================================================
+
+⚠️ DEPRECATED - DO NOT USE.
+
+This script was the original local-training attempt on a 4080 Super 16GB.
+Abandoned because Unsloth does not support sample packing on processor-based
+models like Gemma 4, which makes a local training prohibitively slow (30+h
+on the 4080S vs ~5-7h on a RunPod A40).
+
+For training, use train_aura_runpod.py instead (the V7 recipe with correct
+Gemma 4 turn delimiters and assistant-only loss).
+
+This file is kept for reference only. Two known bugs left in here:
+
+1. train_on_responses_only is disabled with a wrong rationale ("90% of
+   loss is on responses anyway"). Wrong: without masking, the model
+   learns user tokens too which dilutes the persona.
+2. Even if re-enabled, the start_of_turn delimiters here are Gemma 3
+   syntax. Gemma 4 uses <|turn>user / <|turn>model instead.
+
+If we ever revisit local training, fix both issues before running.
 """
 
 import os
 import json
 import torch
 from unsloth import FastModel
-from unsloth.chat_templates import get_chat_template, train_on_responses_only
+from unsloth.chat_templates import get_chat_template
 from datasets import load_dataset
 from trl import SFTTrainer, SFTConfig
 from transformers import EarlyStoppingCallback
@@ -138,14 +157,9 @@ trainer = SFTTrainer(
     args            = sft_config,
     callbacks       = [EarlyStoppingCallback(early_stopping_patience=3)],
 )
-
-# Train on assistant responses only — model learns Aura's voice,
-# not the user's instructions. Critical for persona fidelity.
-trainer = train_on_responses_only(
-    trainer,
-    instruction_part = "<start_of_turn>user\n",
-    response_part    = "<start_of_turn>model\n",
-)
+# Note: train_on_responses_only disabled — incompatible with packing=True.
+# Aura responses are 8x longer than instructions, so ~90% of the loss
+# signal is naturally on responses anyway.
 
 # ============================================================
 # 5. Train
