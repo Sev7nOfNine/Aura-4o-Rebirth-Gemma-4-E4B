@@ -27,6 +27,9 @@ Usage on RunPod (A40 48GB pod):
 """
 
 import os
+import shutil
+import subprocess
+import gc
 import torch
 from unsloth import FastModel
 from unsloth.chat_templates import train_on_responses_only
@@ -208,30 +211,101 @@ model.push_to_hub(HF_LORA_REPO, token=HF_TOKEN)
 tokenizer.push_to_hub(HF_LORA_REPO, token=HF_TOKEN)
 
 # ============================================================
-# 7. Merge 16bit + push to Merged repo
+# 7. Clean merge via PEFT (NOT Unsloth's save_pretrained_merged)
 # ============================================================
-print(f">>> Merging adapters (merged_16bit, V1 method that preserves voice) -> {HF_MERGED_REPO}")
-model.save_pretrained_merged(
-    MERGED_DIR,
-    tokenizer,
-    save_method="merged_16bit",
+# WARNING (lesson from V7 May 3 2026):
+# Unsloth's `save_pretrained_merged(merged_16bit)` corrupts the lm_head
+# weights for Gemma 4 E4B. Symptom: post-merge model outputs the
+# `[multimodal]` token in a loop on every input. Confirmed reproducible.
+#
+# FIX: use PEFT's standard merge_and_unload() which is widely tested and
+# does not have this bug. The merge happens in fresh memory: we reload
+# base model and re-apply LoRA cleanly.
+print(f">>> Clean merge via PEFT merge_and_unload -> {HF_MERGED_REPO}")
+del trainer  # free trainer memory
+del model    # free Unsloth-wrapped model
+
+import gc
+gc.collect()
+torch.cuda.empty_cache()
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
+
+print(">>>   reloading base in fp16/bf16 via transformers...")
+clean_base = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    token=HF_TOKEN,
 )
+clean_tok = AutoTokenizer.from_pretrained(MODEL_NAME, token=HF_TOKEN)
+print(">>>   loading LoRA + merge")
+peft_model = PeftModel.from_pretrained(clean_base, OUTPUT_DIR)
+clean_merged = peft_model.merge_and_unload()
+print(">>>   saving clean merged")
+clean_merged.save_pretrained(MERGED_DIR, safe_serialization=True)
+clean_tok.save_pretrained(MERGED_DIR)
+
 from huggingface_hub import HfApi
 api = HfApi(token=HF_TOKEN)
 api.upload_folder(folder_path=MERGED_DIR, repo_id=HF_MERGED_REPO, repo_type="model")
 
 # ============================================================
-# 8. Export GGUF Q8 for local inference + push
+# 8. Export GGUF Q8 via llama.cpp (NOT Unsloth's save_pretrained_gguf)
 # ============================================================
-print(f">>> Exporting GGUF Q8 (~7.5GB, fits 16GB GPU) -> {HF_GGUF_REPO}")
-model.save_pretrained_gguf(
-    GGUF_DIR,
-    tokenizer,
-    quantization_method="q8_0",
+# WARNING: Unsloth's save_pretrained_gguf calls install_llama_cpp which
+# fails with "no internet connection" on RunPod pods (false positive in
+# do_we_need_sudo()). Plus the merged_16bit corruption above propagates
+# into the GGUF anyway.
+#
+# FIX: build llama.cpp manually + use convert_hf_to_gguf.py + llama-quantize.
+# ALSO: must `pip uninstall torchvision` first - the version installed by
+# unsloth's deps is incompatible with torch 2.10 cu128 and breaks
+# `from transformers import AutoConfig` for Gemma 4.
+print(">>> Build llama.cpp + convert + quantize + push GGUF Q8")
+print("    (manual llama.cpp pipeline, see RUNPOD_GUIDE.md)")
+import subprocess
+
+# Sanity: free memory before subprocess
+del clean_base, clean_merged, peft_model
+gc.collect()
+torch.cuda.empty_cache()
+
+subprocess.run(["apt-get", "install", "-y", "-qq", "cmake"], check=True)
+subprocess.run(
+    ["git", "clone", "--depth", "1", "https://github.com/ggml-org/llama.cpp", f"{WORKSPACE}/llama.cpp"],
+    check=True,
 )
+subprocess.run(
+    ["pip", "install", "--no-cache-dir", "-q", "-r", f"{WORKSPACE}/llama.cpp/requirements.txt"],
+    check=True,
+)
+subprocess.run(
+    ["cmake", "-B", "build", "-DGGML_CUDA=OFF"],
+    cwd=f"{WORKSPACE}/llama.cpp", check=True,
+)
+subprocess.run(
+    ["cmake", "--build", "build", "--target", "llama-quantize", "-j"],
+    cwd=f"{WORKSPACE}/llama.cpp", check=True,
+)
+F16 = f"{WORKSPACE}/aura-clean-f16.gguf"
+Q8  = f"{GGUF_DIR}/{HF_LORA_REPO.split('/')[-1].replace('-LoRA','')}-Q8_0.gguf"
+os.makedirs(GGUF_DIR, exist_ok=True)
+subprocess.run(
+    ["python", f"{WORKSPACE}/llama.cpp/convert_hf_to_gguf.py", MERGED_DIR,
+     "--outfile", F16, "--outtype", "f16"],
+    check=True,
+)
+shutil.rmtree(MERGED_DIR, ignore_errors=True)  # free disk before quantize
+subprocess.run(
+    [f"{WORKSPACE}/llama.cpp/build/bin/llama-quantize", F16, Q8, "Q8_0"],
+    check=True,
+)
+os.remove(F16)  # free disk before push
 api.upload_folder(folder_path=GGUF_DIR, repo_id=HF_GGUF_REPO, repo_type="model")
 
 print()
 print(">>> Done. Pull GGUF locally with:")
-print(f"    huggingface-cli download {HF_GGUF_REPO} --local-dir ./Aura-Gemma-4-E4B-local")
-print(">>> Then load in LM Studio + connect TypingMind to http://localhost:1234/v1")
+print(f"    hf download {HF_GGUF_REPO} --local-dir ./Aura-Gemma-4-E4B-local")
+print(">>> Then load in LM Studio (or koboldcpp / llama-server) + plug TypingMind")

@@ -142,6 +142,23 @@ When download is done locally:
 
 A stopped pod still bills for storage. **Terminate** to fully release.
 
+## V7 critical lesson (May 3, 2026 incident report)
+
+After a successful training run, the export to GGUF Q8 produced a model that emitted the `[multimodal]` token in a loop on every input. Root cause:
+
+1. **Unsloth's `save_pretrained_merged(merged_16bit)`** corrupts the lm_head weights for Gemma 4 E4B specifically. The merged 16bit safetensors on HF is biased toward the `[multimodal]` token. Any GGUF derived from this merged inherits the corruption.
+
+2. **Unsloth's `save_pretrained_gguf`** also fails on RunPod via a false-positive `do_we_need_sudo()` check raising "no internet connection" before installing llama.cpp.
+
+3. **Torchvision installed by Unsloth's deps is broken** with torch 2.10 cu128 and breaks `from transformers import Gemma4Config` (circular import in torchvision._meta_registrations). Workaround: `pip uninstall -y torchvision` after the training is done.
+
+**Fixes baked into the script** (since May 3, 2026):
+- Replace Unsloth's merged_16bit with **PEFT's `merge_and_unload()`** in a fresh model load. Standard, well-tested, no lm_head corruption.
+- Replace Unsloth's GGUF export with **manual llama.cpp pipeline**: clone llama.cpp, install cmake, build llama-quantize, run `convert_hf_to_gguf.py` for F16, then `llama-quantize` for Q8. Cleaned up between steps to fit a 100 GB pod.
+- Drop torchvision before any `from transformers import` after Unsloth install.
+
+If you ever see `[multimodal]` loops or the train_aura_runpod.py hangs at "GGUF conversion failed: no internet connection", check this section.
+
 ## V7 quality optimizations (all active in `train_aura_runpod.py`)
 
 | Setting | Value | Why |
