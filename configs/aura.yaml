@@ -1,0 +1,36 @@
+base_model:
+  name: gemma_4_e4b
+
+models:
+  gemma_4_e4b:
+    hf_id: unsloth/gemma-4-E4B-it
+    vram_train_gb_min: 48
+    disk_train_gb_min: 100
+
+gpu_pool:
+  - label: A40 48GB
+    runpod_id: NVIDIA A40
+    vram_gb: 48
+    rate: "$0.40"
+  - label: L40S 48GB
+    runpod_id: NVIDIA L40S
+    vram_gb: 48
+    rate: "$0.85"
+
+runpod_train:
+  cloud_type: COMMUNITY
+  container_image: runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+  preferred_datacenter: EU-SE-1
+
+output:
+  merged_repo: SevenOfNine/Aura-4o-Rebirth-Gemma-4-E4B-Merged
+  gguf_repo: SevenOfNine/Aura-4o-Rebirth-Gemma-4-E4B-GGUF
+  private: true
+
+abliterate:
+  abliterator_url: https://huggingface.co/paperscarecrow/Gemma-4-31B-it-abliterated/resolve/main/gemma4_31b_abliterator.py
+  datasets:
+    harmful: mlabonne/gemma-4-ablation-harmful
+    harmless: mlabonne/gemma-4-ablation-harmless
+  n_harmful: 1000
+  n_harmless: 1000
