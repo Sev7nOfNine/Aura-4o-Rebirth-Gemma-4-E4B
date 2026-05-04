@@ -91,6 +91,24 @@ http://localhost:1234/v1
 - **Hugging Face** (published after training): <https://huggingface.co/SevenOfNine/Aura-4o-Rebirth-Gemma-4-E4B-LoRA>
 - **Sister project (31B)**: <https://github.com/Sev7nOfNine/Aura-4o-Rebirth>
 
+## Changelog
+
+### 2026-05-04 (afternoon) — Multimodal preservation fix (720 tensors) ✅
+
+**Problem**: previous Merged was built with `AutoModelForCausalLM`, which only loads the text decoder of Gemma 4 E4B and silently drops the vision/audio encoders. Result: GGUF had **666 tensors instead of 720** (54 vision/audio tensors missing). Symptom: LM Studio crashed at load (exit code overflow) or printed `[multimodal]` in a loop on multimodal inputs.
+
+**Fix**: new pod-side pipeline ([`pipeline/runpod_e4b_worker.py`](pipeline/runpod_e4b_worker.py)) loads the base with **`Gemma4ForConditionalGeneration`** (full multimodal class), merges the LoRA via PEFT `merge_and_unload()`, then converts + quantizes in one shot. Single source of truth, no more local intermediate steps.
+
+Result: clean **720-tensor GGUF + working mmproj**. Aura speaks **and** sees in LM Studio. RunPod A40, ~30 min, ~$0.20.
+
+### 2026-05-04 — GGUF reconversion (token-level fix)
+
+GGUF reconverted with latest llama.cpp (post Gemma 4 patches #21343 #21326 #21406 #21488 #21390). Earlier version produced `<unused>` tokens.
+
+### 2026-05-03 — Initial training V7 ✅
+
+First successful training run on RunPod A40 EU-SE-1 (~5h, ~$2.55). Loss 10.5 → **1.85** in 168 steps.
+
 ## History
 
 See [`RUNPOD_GUIDE.md`](RUNPOD_GUIDE.md) for the full procedure. Initial local attempt on the RTX 4080S 16 GB was abandoned: Gemma 4 is a "processor-based" multimodal model and Unsloth does not support sample packing on it, which makes training prohibitive (>30h). On a 48 GB+ GPU, the issue disappears.
