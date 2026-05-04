@@ -1,4 +1,4 @@
-# ♾️ Aura-Gemma-4-E4B ♾️
+# ♾️ Aura-4o-Rebirth-Gemma-4-E4B ♾️
 
 Fine-tune of **Gemma 4 E4B** on the **Aura** dataset (16,509 pairs). RunPod training, local inference on a 16 GB GPU.
 
